@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Parts Per Million Explorer</title>
+    <style>
+        body {
+            font-family: 'MS Sans Serif', sans-serif;
+            background-color: #c0c0c0;
+            margin: 0;
+            padding: 20px;
+            height: 100vh;
+            box-sizing: border-box;
+            color: #000;
+            overflow: hidden;
+        }
+        .window {
+            border: 2px outset #c0c0c0;
+            background-color: #c0c0c0;
+            width: 100%;
+            height: 100%;
+            box-sizing: border-box;
+            box-shadow: 4px 4px 8px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+        }
+        .title-bar {
+            background: linear-gradient(to right, #000080, #1084d0);
+            color: white;
+            padding: 2px 5px;
+            font-weight: bold;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+        .content {
+            padding: 10px;
+            background-color: white;
+            border: 1px inset #c0c0c0;
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .ppm-buttons {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 3px;
+            margin: 5px 0;
+            flex-shrink: 0;
+        }
+        .ppm-btn {
+            background-color: #c0c0c0;
+            border: 2px outset #c0c0c0;
+            padding: 3px 4px;
+            font-family: 'MS Sans Serif', sans-serif;
+            font-size: 11px;
+            cursor: pointer;
+            text-align: center;
+            line-height: 1.3;
+        }
+        .ppm-btn:active {
+            border: 2px inset #c0c0c0;
+        }
+        .ppm-btn.active {
+            border: 2px inset #c0c0c0;
+            background-color: #a8a8a8;
+        }
+        .canvas-wrapper {
+            flex: 1;
+            min-height: 0;
+            overflow: auto;
+            margin: 4px 0;
+        }
+        canvas {
+            border: 1px solid #000;
+            display: block;
+        }
+        p {
+            margin: 3px 0;
+            flex-shrink: 0;
+            font-size: 12px;
+        }
+        #infoDesc {
+            font-style: italic;
+            color: #333;
+        }
+        .bottom-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-shrink: 0;
+            margin-top: 3px;
+        }
+        button#flashButton {
+            background-color: #c0c0c0;
+            border: 2px outset #c0c0c0;
+            padding: 4px 10px;
+            font-family: 'MS Sans Serif', sans-serif;
+            font-size: 12px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        button#flashButton:active {
+            border: 2px inset #c0c0c0;
+        }
+        button#flashButton:disabled {
+            background-color: #c0c0c0;
+            border: 2px outset #c0c0c0;
+            color: #808080;
+            cursor: default;
+        }
+        #statusLine {
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="window">
+        <div class="title-bar">Parts Per Million Explorer</div>
+        <div class="content">
+            <p><strong>Parts per million (ppm)</strong> describes the concentration of one substance in a million parts of a mixture — used for pollutants, toxic gases, and atmospheric CO₂.</p>
+            <p id="infoDesc">Mercury vapor at 1 PPM — OSHA permissible exposure limit (PEL). Chronic exposure damages the nervous system and kidneys. Each red pixel below is 1 part in 1,000,000.</p>
+
+            <!-- 2 rows of 5 PPM preset buttons -->
+            <div class="ppm-buttons">
+                <button class="ppm-btn active" data-index="0">Mercury<br>1 PPM</button>
+                <button class="ppm-btn" data-index="1">Lead Dust<br>5 PPM</button>
+                <button class="ppm-btn" data-index="2">Carbon<br>Monoxide 35</button>
+                <button class="ppm-btn" data-index="3">H₂S<br>100 PPM</button>
+                <button class="ppm-btn" data-index="4">Ammonia<br>300 PPM</button>
+                <button class="ppm-btn" data-index="5">CO₂ Outdoor<br>421 PPM</button>
+                <button class="ppm-btn" data-index="6">CO₂ Stuffy<br>1,000 PPM</button>
+                <button class="ppm-btn" data-index="7">CO₂ Poor<br>2,500 PPM</button>
+                <button class="ppm-btn" data-index="8">CO₂ OSHA<br>5,000 PPM</button>
+                <button class="ppm-btn" data-index="9">CO₂ Danger<br>10,000 PPM</button>
+            </div>
+
+            <div class="canvas-wrapper">
+                <canvas id="ppmCanvas" width="1000" height="1000"></canvas>
+            </div>
+
+            <div class="bottom-row">
+                <button id="flashButton">Show the PPM pixels</button>
+                <span id="statusLine">Showing: <strong id="statusName">Mercury Vapor</strong> — <strong id="statusPPM">1 PPM</strong> &nbsp;|&nbsp; Canvas: <span id="dimsLabel">1,000 × 1,000</span> = 1,000,000 pixels</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const TOTAL = 1_000_000;
+        const canvas = document.getElementById('ppmCanvas');
+        const ctx = canvas.getContext('2d');
+        const flashButton = document.getElementById('flashButton');
+        const dimsLabel = document.getElementById('dimsLabel');
+        const infoDesc = document.getElementById('infoDesc');
+        const statusName = document.getElementById('statusName');
+        const statusPPM = document.getElementById('statusPPM');
+        const wrapper = canvas.parentElement;
+
+        const PRESETS = [
+            {
+                name: 'Mercury Vapor', ppm: 1,
+                dot: [139, 0, 139], bg: [255, 255, 220],
+                desc: 'Mercury vapor at 1 PPM — OSHA permissible exposure limit (PEL). Chronic exposure damages the nervous system and kidneys. Each red-violet pixel is 1 part in 1,000,000.'
+            },
+            {
+                name: 'Lead Dust', ppm: 5,
+                dot: [70, 70, 70], bg: [255, 255, 220],
+                desc: 'Lead dust at 5 PPM — OSHA PEL. Lead has no safe level of exposure; it causes irreversible cognitive damage, especially in children. 5 dark pixels represent 5 parts per million.'
+            },
+            {
+                name: 'Carbon Monoxide', ppm: 35,
+                dot: [210, 60, 0], bg: [255, 255, 220],
+                desc: 'Carbon monoxide (CO) at 35 PPM — OSHA 8-hour exposure ceiling. Odorless and colorless; headaches begin after several hours at this level.'
+            },
+            {
+                name: 'Hydrogen Sulfide (H₂S)', ppm: 100,
+                dot: [160, 140, 0], bg: [255, 255, 220],
+                desc: 'Hydrogen sulfide at 100 PPM — causes rapid "olfactory fatigue" (you stop smelling it), masking the danger. OSHA IDLH is 50 PPM; 100 PPM is acutely dangerous.'
+            },
+            {
+                name: 'Ammonia', ppm: 300,
+                dot: [0, 110, 200], bg: [255, 255, 220],
+                desc: 'Ammonia at 300 PPM — NIOSH IDLH threshold. Severe respiratory irritation and eye damage. Common in refrigeration systems and industrial cleaning.'
+            },
+            {
+                name: 'CO₂ — Outdoor Air', ppm: 421,
+                dot: [30, 80, 210], bg: [255, 255, 220],
+                desc: 'Carbon dioxide at 421 PPM — current outdoor atmospheric level (2024). Pre-industrial levels were ~280 PPM; this rise of 50% since 1800 is driving climate change.'
+            },
+            {
+                name: 'CO₂ — Stuffy Room', ppm: 1000,
+                dot: [20, 60, 190], bg: [255, 255, 210],
+                desc: 'CO₂ at 1,000 PPM — typical stuffy office or classroom. Research shows roughly a 15% reduction in cognitive performance at this concentration. Open a window!'
+            },
+            {
+                name: 'CO₂ — Poor Air Quality', ppm: 2500,
+                dot: [10, 40, 170], bg: [255, 255, 200],
+                desc: 'CO₂ at 2,500 PPM — poor indoor air quality. Drowsiness, headaches, and difficulty concentrating are common. Urgent ventilation is needed.'
+            },
+            {
+                name: 'CO₂ — OSHA 8-hr Limit', ppm: 5000,
+                dot: [5, 20, 150], bg: [255, 255, 185],
+                desc: 'CO₂ at 5,000 PPM — OSHA 8-hour TWA limit. Significant impairment to decision-making, complex tasks, and reaction time. Rarely reached in properly ventilated buildings.'
+            },
+            {
+                name: 'CO₂ — Dangerous Level', ppm: 10000,
+                dot: [0, 0, 128], bg: [255, 255, 170],
+                desc: 'CO₂ at 10,000 PPM — dangerous exposure level. 1 in 100 molecules is CO₂. Dizziness, rapid heartbeat, impaired vision, and potential loss of consciousness.'
+            }
+        ];
+
+        // Precompute all divisors of 1,000,000 = 2^6 * 5^6, sorted ascending
+        const divisors = [];
+        for (let i = 1; i * i <= TOTAL; i++) {
+            if (TOTAL % i === 0) {
+                divisors.push(i);
+                if (i !== TOTAL / i) divisors.push(TOTAL / i);
+            }
+        }
+        divisors.sort((a, b) => a - b);
+
+        let cols = 1000, rows = 1000;
+        let currentIndex = 0;
+        let dots = []; // [{x, y}]
+        let needsRedraw = true;
+
+        // Flash state
+        let flashing = false;
+        let flashRadius = 0;
+        const MAX_FLASH_RADIUS = 150;
+
+        function generateDots(preset) {
+            const n = preset.ppm;
+            const result = [];
+            for (let i = 0; i < n; i++) {
+                result.push({
+                    x: Math.floor(Math.random() * cols),
+                    y: Math.floor(Math.random() * rows)
+                });
+            }
+            return result;
+        }
+
+        function applyDimensions(availableWidth) {
+            let bestCols = 1;
+            for (const d of divisors) {
+                if (d <= availableWidth) bestCols = d;
+                else break;
+            }
+            const bestRows = TOTAL / bestCols;
+            const cssWidth = availableWidth;
+            const cssHeight = Math.round(bestRows / bestCols * availableWidth);
+
+            if (bestCols !== cols || bestRows !== rows) {
+                cols = bestCols;
+                rows = bestRows;
+                canvas.width = cols;
+                canvas.height = rows;
+                dimsLabel.textContent = `${cols.toLocaleString()} × ${rows.toLocaleString()}`;
+                dots = generateDots(PRESETS[currentIndex]);
+                needsRedraw = true;
+            }
+
+            canvas.style.width = cssWidth + 'px';
+            canvas.style.height = cssHeight + 'px';
+        }
+
+        new ResizeObserver(() => applyDimensions(wrapper.clientWidth)).observe(wrapper);
+
+        function drawFrame() {
+            const preset = PRESETS[currentIndex];
+            const [bgR, bgG, bgB] = preset.bg;
+            const [dotR, dotG, dotB] = preset.dot;
+
+            const imageData = ctx.createImageData(cols, rows);
+            const data = imageData.data;
+
+            // Fill background
+            for (let i = 0; i < data.length; i += 4) {
+                data[i]     = bgR;
+                data[i + 1] = bgG;
+                data[i + 2] = bgB;
+                data[i + 3] = 255;
+            }
+
+            // Draw dots
+            for (const dot of dots) {
+                const idx = (dot.y * cols + dot.x) * 4;
+                data[idx]     = dotR;
+                data[idx + 1] = dotG;
+                data[idx + 2] = dotB;
+                data[idx + 3] = 255;
+            }
+
+            ctx.putImageData(imageData, 0, 0);
+
+            // Draw flash rings for first 5 buttons (indices 0–4)
+            if (flashing && currentIndex < 5) {
+                const alpha = (1 - flashRadius / MAX_FLASH_RADIUS).toFixed(3);
+                ctx.strokeStyle = `rgba(255,0,0,${alpha})`;
+                ctx.lineWidth = 3;
+                for (const dot of dots) {
+                    ctx.beginPath();
+                    ctx.arc(dot.x + 0.5, dot.y + 0.5, flashRadius, 0, 2 * Math.PI);
+                    ctx.stroke();
+                }
+            } else if (flashing && currentIndex >= 5) {
+                // For large PPM: draw a bright border pulse
+                const alpha = 1 - flashRadius / MAX_FLASH_RADIUS;
+                ctx.strokeStyle = `rgba(255,0,0,${alpha})`;
+                ctx.lineWidth = 8;
+                ctx.strokeRect(4, 4, cols - 8, rows - 8);
+            }
+        }
+
+        function selectPreset(index) {
+            currentIndex = index;
+            const preset = PRESETS[index];
+            dots = generateDots(preset);
+            flashing = false;
+            flashRadius = 0;
+
+            infoDesc.textContent = preset.desc;
+            statusName.textContent = preset.name;
+            statusPPM.textContent = preset.ppm.toLocaleString() + ' PPM';
+
+            document.querySelectorAll('.ppm-btn').forEach((btn, i) => {
+                btn.classList.toggle('active', i === index);
+            });
+
+            flashButton.disabled = index >= 5;
+            needsRedraw = true;
+        }
+
+        document.querySelectorAll('.ppm-btn').forEach(btn => {
+            btn.addEventListener('click', () => selectPreset(parseInt(btn.dataset.index)));
+        });
+
+        flashButton.addEventListener('click', () => {
+            if (!flashing) {
+                flashing = true;
+                flashRadius = 0;
+            }
+        });
+
+        function animationLoop() {
+            if (flashing) {
+                flashRadius += 1.5;
+                if (flashRadius >= MAX_FLASH_RADIUS) {
+                    flashing = false;
+                    flashRadius = 0;
+                }
+                drawFrame();
+            } else if (needsRedraw) {
+                drawFrame();
+                needsRedraw = false;
+            }
+            requestAnimationFrame(animationLoop);
+        }
+
+        // Initialize with preset 0
+        applyDimensions(wrapper.clientWidth);
+        selectPreset(0);
+        animationLoop();
+    </script>
+</body>
+</html>
