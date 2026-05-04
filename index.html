@@ -67,10 +67,12 @@
             border: 2px inset #c0c0c0;
             background-color: #a8a8a8;
         }
-        .canvas-wrapper {
+        .canvas-scroll-area {
             flex: 1;
             min-height: 0;
             overflow: auto;
+        }
+        .canvas-wrapper {
             margin: 4px 0;
         }
         canvas {
@@ -137,6 +139,7 @@
                 <button class="ppm-btn" data-index="9">CO₂ Danger<br>10,000 PPM</button>
             </div>
 
+            <div class="canvas-scroll-area">
             <div class="canvas-wrapper">
                 <canvas id="ppmCanvas" width="1000" height="1000"></canvas>
             </div>
@@ -144,6 +147,7 @@
             <div class="bottom-row">
                 <button id="flashButton">Show the PPM pixels</button>
                 <span id="statusLine">Showing: <strong id="statusName">Mercury Vapor</strong> — <strong id="statusPPM">1 PPM</strong> &nbsp;|&nbsp; Canvas: <span id="dimsLabel">1,000 × 1,000</span> = 1,000,000 pixels</span>
+            </div>
             </div>
         </div>
     </div>
