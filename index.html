@@ -409,7 +409,7 @@
 
             ctx.putImageData(imageData, 0, 0);
 
-            if (flashing && currentIndex < 5) {
+            if (flashing) {
                 const alpha = (1 - flashRadius / MAX_FLASH_RADIUS).toFixed(3);
                 ctx.strokeStyle = `rgba(255,0,0,${alpha})`;
                 ctx.lineWidth = 3;
@@ -418,11 +418,6 @@
                     ctx.arc(dot.x + 0.5, dot.y + 0.5, flashRadius, 0, 2 * Math.PI);
                     ctx.stroke();
                 }
-            } else if (flashing && currentIndex >= 5) {
-                const alpha = 1 - flashRadius / MAX_FLASH_RADIUS;
-                ctx.strokeStyle = `rgba(255,0,0,${alpha})`;
-                ctx.lineWidth = 8;
-                ctx.strokeRect(4, 4, cols - 8, rows - 8);
             }
         }
 
@@ -441,7 +436,7 @@
                 btn.classList.toggle('active', i === index);
             });
 
-            flashButton.disabled = index >= 5;
+            flashButton.disabled = false;
             needsRedraw = true;
         }
 
