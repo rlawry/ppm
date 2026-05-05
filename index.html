@@ -67,13 +67,78 @@
             border: 2px inset #c0c0c0;
             background-color: #a8a8a8;
         }
-        .canvas-scroll-area {
-            flex: 1;
+        .canvas-scroll-container {
+            flex: 0 1 auto;
             min-height: 0;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+        .canvas-scroll-area {
+            width: 100%;
             overflow: auto;
+            flex: 0 0 auto;
+            max-height: 100%;
+            min-height: 0;
+            box-sizing: border-box;
+        }
+        @media (max-width: 767px) {
+            .canvas-scroll-area {
+                max-height: 70vw;
+            }
         }
         .canvas-wrapper {
             margin: 4px 0;
+        }
+        .scroll-arrow {
+            position: absolute;
+            display: none;
+            background-color: #c0c0c0;
+            border-top: 2px solid #ffffff;
+            border-left: 2px solid #ffffff;
+            border-right: 2px solid #808080;
+            border-bottom: 2px solid #808080;
+            width: 18px;
+            height: 18px;
+            font-size: 9px;
+            line-height: 1;
+            cursor: pointer;
+            padding: 0;
+            font-family: 'MS Sans Serif', sans-serif;
+            color: #000;
+            z-index: 10;
+            align-items: center;
+            justify-content: center;
+            user-select: none;
+        }
+        .scroll-arrow:active {
+            border-top: 2px solid #808080;
+            border-left: 2px solid #808080;
+            border-right: 2px solid #ffffff;
+            border-bottom: 2px solid #ffffff;
+        }
+        .scroll-arrow.visible {
+            display: flex;
+        }
+        .scroll-arrow-up {
+            top: 4px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        .scroll-arrow-down {
+            bottom: 4px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        .scroll-arrow-left {
+            left: 4px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+        .scroll-arrow-right {
+            right: 4px;
+            top: 50%;
+            transform: translateY(-50%);
         }
         canvas {
             border: 1px solid #000;
@@ -122,10 +187,9 @@
     <div class="window">
         <div class="title-bar">Parts Per Million Explorer</div>
         <div class="content">
-            <p><strong>Parts per million (ppm)</strong> describes the concentration of one substance in a million parts of a mixture - used for pollutants, toxic gases, and atmospheric CO₂.</p>
-            <p id="infoDesc">Mercury vapor at 1 PPM - OSHA permissible exposure limit (PEL). Chronic exposure damages the nervous system and kidneys. Each red pixel below is 1 part in 1,000,000.</p>
+            <p><strong>Parts per million (ppm)</strong> describes the concentration of one substance in a million parts of a mixture — used for pollutants, toxic gases, and atmospheric CO₂.</p>
+            <p id="infoDesc">Mercury vapor at 1 PPM — OSHA permissible exposure limit (PEL). Chronic exposure damages the nervous system and kidneys. Each red pixel below is 1 part in 1,000,000.</p>
 
-            <!-- 2 rows of 5 PPM preset buttons -->
             <div class="ppm-buttons">
                 <button class="ppm-btn active" data-index="0">Mercury<br>1 PPM</button>
                 <button class="ppm-btn" data-index="1">Lead Dust<br>5 PPM</button>
@@ -139,15 +203,21 @@
                 <button class="ppm-btn" data-index="9">CO₂ Danger<br>10,000 PPM</button>
             </div>
 
-            <div class="canvas-scroll-area">
-                <div class="canvas-wrapper">
-                    <canvas id="ppmCanvas" width="1000" height="1000"></canvas>
+            <div class="canvas-scroll-container">
+                <div class="canvas-scroll-area" id="canvasScrollArea">
+                    <div class="canvas-wrapper">
+                        <canvas id="ppmCanvas" width="1000" height="1000"></canvas>
+                    </div>
                 </div>
+                <button class="scroll-arrow scroll-arrow-up"    id="arrowUp">&#9650;</button>
+                <button class="scroll-arrow scroll-arrow-down"  id="arrowDown">&#9660;</button>
+                <button class="scroll-arrow scroll-arrow-left"  id="arrowLeft">&#9668;</button>
+                <button class="scroll-arrow scroll-arrow-right" id="arrowRight">&#9658;</button>
             </div>
 
             <div class="bottom-row">
                 <button id="flashButton">Show the PPM pixels</button>
-                <span id="statusLine">Showing: <strong id="statusName">Mercury Vapor</strong> - <strong id="statusPPM">1 PPM</strong> &nbsp;|&nbsp; Canvas: <span id="dimsLabel">1,000 × 1,000</span> = 1,000,000 pixels</span>
+                <span id="statusLine">Showing: <strong id="statusName">Mercury Vapor</strong> — <strong id="statusPPM">1 PPM</strong> &nbsp;|&nbsp; Canvas: <span id="dimsLabel">1,000 × 1,000</span> = 1,000,000 pixels</span>
             </div>
         </div>
     </div>
@@ -161,62 +231,100 @@
         const infoDesc = document.getElementById('infoDesc');
         const statusName = document.getElementById('statusName');
         const statusPPM = document.getElementById('statusPPM');
-        const wrapper = canvas.parentElement;
+        const scrollArea = document.getElementById('canvasScrollArea');
+
+        const arrowUp    = document.getElementById('arrowUp');
+        const arrowDown  = document.getElementById('arrowDown');
+        const arrowLeft  = document.getElementById('arrowLeft');
+        const arrowRight = document.getElementById('arrowRight');
+        const SCROLL_STEP = 80;
+        let scrollInterval = null;
+
+        function updateArrows() {
+            const sl = scrollArea.scrollLeft, st = scrollArea.scrollTop;
+            const msl = scrollArea.scrollWidth  - scrollArea.clientWidth;
+            const mst = scrollArea.scrollHeight - scrollArea.clientHeight;
+            arrowUp.classList.toggle('visible',    mst > 0 && st > 1);
+            arrowDown.classList.toggle('visible',  mst > 0 && st < mst - 1);
+            arrowLeft.classList.toggle('visible',  msl > 0 && sl > 1);
+            arrowRight.classList.toggle('visible', msl > 0 && sl < msl - 1);
+        }
+
+        function startScroll(dx, dy) {
+            stopScroll();
+            const step = () => scrollArea.scrollBy(dx, dy);
+            step();
+            scrollInterval = setInterval(step, 80);
+        }
+        function stopScroll() {
+            if (scrollInterval) { clearInterval(scrollInterval); scrollInterval = null; }
+        }
+
+        function bindArrow(btn, dx, dy) {
+            btn.addEventListener('pointerdown', e => { e.preventDefault(); startScroll(dx, dy); });
+        }
+        bindArrow(arrowUp,    0, -SCROLL_STEP);
+        bindArrow(arrowDown,  0,  SCROLL_STEP);
+        bindArrow(arrowLeft, -SCROLL_STEP, 0);
+        bindArrow(arrowRight, SCROLL_STEP, 0);
+        document.addEventListener('pointerup',     stopScroll);
+        document.addEventListener('pointercancel', stopScroll);
+
+        scrollArea.addEventListener('scroll', updateArrows);
 
         const PRESETS = [
             {
                 name: 'Mercury Vapor', ppm: 1,
                 dot: [139, 0, 139], bg: [255, 255, 220],
-                desc: 'Mercury vapor at 1 PPM - OSHA permissible exposure limit (PEL). Chronic exposure damages the nervous system and kidneys. Each red-violet pixel is 1 part in 1,000,000.'
+                desc: 'Mercury vapor at 1 PPM — OSHA permissible exposure limit (PEL). Chronic exposure damages the nervous system and kidneys. Each red-violet pixel is 1 part in 1,000,000.'
             },
             {
                 name: 'Lead Dust', ppm: 5,
                 dot: [70, 70, 70], bg: [255, 255, 220],
-                desc: 'Lead dust at 5 PPM - OSHA PEL. Lead has no safe level of exposure; it causes irreversible cognitive damage, especially in children. 5 dark pixels represent 5 parts per million.'
+                desc: 'Lead dust at 5 PPM — OSHA PEL. Lead has no safe level of exposure; it causes irreversible cognitive damage, especially in children. 5 dark pixels represent 5 parts per million.'
             },
             {
                 name: 'Carbon Monoxide', ppm: 35,
                 dot: [210, 60, 0], bg: [255, 255, 220],
-                desc: 'Carbon monoxide (CO) at 35 PPM - OSHA 8-hour exposure ceiling. Odorless and colorless; headaches begin after several hours at this level.'
+                desc: 'Carbon monoxide (CO) at 35 PPM — OSHA 8-hour exposure ceiling. Odorless and colorless; headaches begin after several hours at this level.'
             },
             {
                 name: 'Hydrogen Sulfide (H₂S)', ppm: 100,
                 dot: [160, 140, 0], bg: [255, 255, 220],
-                desc: 'Hydrogen sulfide at 100 PPM - causes rapid "olfactory fatigue" (you stop smelling it), masking the danger. OSHA IDLH is 50 PPM; 100 PPM is acutely dangerous.'
+                desc: 'Hydrogen sulfide at 100 PPM — causes rapid "olfactory fatigue" (you stop smelling it), masking the danger. OSHA IDLH is 50 PPM; 100 PPM is acutely dangerous.'
             },
             {
                 name: 'Ammonia', ppm: 300,
                 dot: [0, 110, 200], bg: [255, 255, 220],
-                desc: 'Ammonia at 300 PPM - NIOSH IDLH threshold. Severe respiratory irritation and eye damage. Common in refrigeration systems and industrial cleaning.'
+                desc: 'Ammonia at 300 PPM — NIOSH IDLH threshold. Severe respiratory irritation and eye damage. Common in refrigeration systems and industrial cleaning.'
             },
             {
-                name: 'CO₂ - Outdoor Air', ppm: 421,
+                name: 'CO₂ — Outdoor Air', ppm: 421,
                 dot: [30, 80, 210], bg: [255, 255, 220],
-                desc: 'Carbon dioxide at 421 PPM - current outdoor atmospheric level (2024). Pre-industrial levels were ~280 PPM; this rise of 50% since 1800 is driving climate change.'
+                desc: 'Carbon dioxide at 421 PPM — current outdoor atmospheric level (2024). Pre-industrial levels were ~280 PPM; this rise of 50% since 1800 is driving climate change.'
             },
             {
-                name: 'CO₂ - Stuffy Room', ppm: 1000,
+                name: 'CO₂ — Stuffy Room', ppm: 1000,
                 dot: [20, 60, 190], bg: [255, 255, 210],
-                desc: 'CO₂ at 1,000 PPM - typical stuffy office or classroom. Research shows roughly a 15% reduction in cognitive performance at this concentration. Open a window!'
+                desc: 'CO₂ at 1,000 PPM — typical stuffy office or classroom. Research shows roughly a 15% reduction in cognitive performance at this concentration. Open a window!'
             },
             {
-                name: 'CO₂ - Poor Air Quality', ppm: 2500,
+                name: 'CO₂ — Poor Air Quality', ppm: 2500,
                 dot: [10, 40, 170], bg: [255, 255, 200],
-                desc: 'CO₂ at 2,500 PPM - poor indoor air quality. Drowsiness, headaches, and difficulty concentrating are common. Urgent ventilation is needed.'
+                desc: 'CO₂ at 2,500 PPM — poor indoor air quality. Drowsiness, headaches, and difficulty concentrating are common. Urgent ventilation is needed.'
             },
             {
-                name: 'CO₂ - OSHA 8-hr Limit', ppm: 5000,
+                name: 'CO₂ — OSHA 8-hr Limit', ppm: 5000,
                 dot: [5, 20, 150], bg: [255, 255, 185],
-                desc: 'CO₂ at 5,000 PPM - OSHA 8-hour TWA limit. Significant impairment to decision-making, complex tasks, and reaction time. Rarely reached in properly ventilated buildings.'
+                desc: 'CO₂ at 5,000 PPM — OSHA 8-hour TWA limit. Significant impairment to decision-making, complex tasks, and reaction time. Rarely reached in properly ventilated buildings.'
             },
             {
-                name: 'CO₂ - Dangerous Level', ppm: 10000,
+                name: 'CO₂ — Dangerous Level', ppm: 10000,
                 dot: [0, 0, 128], bg: [255, 255, 170],
-                desc: 'CO₂ at 10,000 PPM - dangerous exposure level. 1 in 100 molecules is CO₂. Dizziness, rapid heartbeat, impaired vision, and potential loss of consciousness.'
+                desc: 'CO₂ at 10,000 PPM — dangerous exposure level. 1 in 100 molecules is CO₂. Dizziness, rapid heartbeat, impaired vision, and potential loss of consciousness.'
             }
         ];
 
-        // Precompute all divisors of 1,000,000 = 2^6 * 5^6, sorted ascending
         const divisors = [];
         for (let i = 1; i * i <= TOTAL; i++) {
             if (TOTAL % i === 0) {
@@ -228,10 +336,9 @@
 
         let cols = 1000, rows = 1000;
         let currentIndex = 0;
-        let dots = []; // [{x, y}]
+        let dots = [];
         let needsRedraw = true;
 
-        // Flash state
         let flashing = false;
         let flashRadius = 0;
         const MAX_FLASH_RADIUS = 150;
@@ -268,11 +375,14 @@
                 needsRedraw = true;
             }
 
-            canvas.style.width = cssWidth + 'px';
+            canvas.style.width  = cssWidth + 'px';
             canvas.style.height = cssHeight + 'px';
         }
 
-        new ResizeObserver(() => applyDimensions(wrapper.clientWidth)).observe(wrapper);
+        new ResizeObserver(() => {
+            applyDimensions(scrollArea.clientWidth);
+            requestAnimationFrame(updateArrows);
+        }).observe(scrollArea);
 
         function drawFrame() {
             const preset = PRESETS[currentIndex];
@@ -282,7 +392,6 @@
             const imageData = ctx.createImageData(cols, rows);
             const data = imageData.data;
 
-            // Fill background
             for (let i = 0; i < data.length; i += 4) {
                 data[i]     = bgR;
                 data[i + 1] = bgG;
@@ -290,7 +399,6 @@
                 data[i + 3] = 255;
             }
 
-            // Draw dots
             for (const dot of dots) {
                 const idx = (dot.y * cols + dot.x) * 4;
                 data[idx]     = dotR;
@@ -301,7 +409,6 @@
 
             ctx.putImageData(imageData, 0, 0);
 
-            // Draw flash rings for first 5 buttons (indices 0–4)
             if (flashing && currentIndex < 5) {
                 const alpha = (1 - flashRadius / MAX_FLASH_RADIUS).toFixed(3);
                 ctx.strokeStyle = `rgba(255,0,0,${alpha})`;
@@ -312,7 +419,6 @@
                     ctx.stroke();
                 }
             } else if (flashing && currentIndex >= 5) {
-                // For large PPM: draw a bright border pulse
                 const alpha = 1 - flashRadius / MAX_FLASH_RADIUS;
                 ctx.strokeStyle = `rgba(255,0,0,${alpha})`;
                 ctx.lineWidth = 8;
@@ -365,10 +471,10 @@
             requestAnimationFrame(animationLoop);
         }
 
-        // Initialize with preset 0
-        applyDimensions(wrapper.clientWidth);
+        applyDimensions(scrollArea.clientWidth);
         selectPreset(0);
         animationLoop();
+        setTimeout(updateArrows, 100);
     </script>
 </body>
 </html>
